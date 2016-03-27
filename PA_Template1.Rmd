@@ -1,0 +1,91 @@
+---
+title: "Reproducible Research - Personal Movement Data Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Analysis of Personal Movement Data from Activity Monitoring Devices
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The data for this assignment can be downloaded from the course web site:
+
+Dataset: Activity monitoring data [52K]
+The variables included in this dataset are:
+
+steps: Number of steps taking in a 5-minute interval (missing values are coded as 𝙽𝙰)
+date: The date on which the measurement was taken in YYYY-MM-DD format
+interval: Identifier for the 5-minute interval in which measurement was taken
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+The first code chunk handles data manipulation for the exercise. The source data is structured to remove the NAs. 
+
+```{r data manipulation}
+MyData <- read.csv(file="/Users/wolfram/Dropbox/WD/reproducible research/activity.csv", header=TRUE, sep=",")
+CleanData <- MyData[complete.cases(MyData),]
+```
+
+This part calculates the mean total number of steps treaded per day. 
+```{r mean total number of steps per day, echo = TRUE}
+library(data.table)
+CleanData <- data.table(CleanData)
+Stepsperday <- CleanData[,sum(steps),by = date]
+names(Stepsperday) <- c("date","sum")
+Stepsperday$date <- as.POSIXct(Stepsperday$date)
+
+library(ggplot2)
+library(scales)
+
+ggplot(Stepsperday, aes(date, sum)) + geom_bar(stat = "sum")+theme(legend.position = "none", plot.title = element_text(lineheight=.8, face="bold"))+ggtitle("Numbers of Steps per Day")
+meanstepsperday <- mean(Stepsperday$sum)  
+medianstepsperday <- as.numeric(median(Stepsperday$sum))
+
+```
+The mean number of steps per day is 10766.2 and the median is 10765.
+
+The next part covers the average daily activity pattern. It identifies the interval at which maximum number of steps were covered on an average.
+
+```{r average daily activity pattern, echo = TRUE}
+Avgstepsperinterval <- CleanData[,mean(steps), by = interval]
+names(Avgstepsperinterval) <- c("interval","average")
+
+ggplot(Avgstepsperinterval, aes(interval, average)) + geom_bar(stat = "identity")+theme(legend.position = "none", plot.title = element_text(lineheight=.8, face="bold"))+ggtitle("Average Steps per Interval")
+
+higheststeps <- max(Avgstepsperinterval$average)
+higheststepinterval <- as.numeric(Avgstepsperinterval$interval[Avgstepsperinterval$average == higheststeps])
+```
+The highest number of steps were treaded on average at the 835th interval.
+
+The next chunk imputes average values (based on each interval) for the NAs that were identified in the structured version of the source data.
+```{r imputing missing values, echo = TRUE}
+TotalAvg <- mean(Avgstepsperinterval$average)
+StructData <- as.data.frame(MyData)
+
+StructData$steps <- ifelse(is.na(StructData$steps), Avgstepsperinterval$average[match(StructData$interval,Avgstepsperinterval$interval)],StructData$steps)
+
+StructData2 <- data.table(StructData)
+
+Stepsperday2 <- StructData2[,sum(steps),by = date]
+names(Stepsperday2) <- c("date","sum")
+Stepsperday2$date <- as.POSIXct(Stepsperday2$date)
+
+ggplot(Stepsperday2, aes(date, sum)) + geom_bar(stat = "sum")+theme(legend.position = "none", plot.title = element_text(lineheight=.8, face="bold"))+ggtitle("Number of Steps per Day (NAs replaced)")
+
+meanstepsperday2 <- mean(Stepsperday2$sum)
+medianstepsperday2 <- as.numeric(median(Stepsperday2$sum))
+
+```
+The mean and median number of steps when NAs are replaced equals 10766.2
+
+The last part plots the average number of steps covered during each interval on weekdays and weekends. The data is plotted with weekdays and weekends separated out.
+```{r weekday and weekend plots, echo = TRUE}
+library(timeDate)
+StructData2$date <- as.POSIXct(StructData2$date)
+StructData2$daytype <- ifelse(isWeekday(StructData2$date, wday = 1:5),"weekday","weekend")
+
+library(lattice)
+xyplot(steps~interval | factor(daytype), data = StructData2, pch = 13, type= c("l","r"),main = "Steps - Weekdays vs. Weekends")
+```
+
